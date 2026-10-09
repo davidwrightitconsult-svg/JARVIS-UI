@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { getDashboard, type DashboardResponse } from './api/client'
-import Brain from './components/Brain'
+import Orb from './components/Orb'
 function StatusDot({ status }: { status: string }) {
   const color =
     status === 'HEALTHY' || status === 'ONLINE'
@@ -204,12 +204,17 @@ function App() {
               <div className="col-span-6">
                 <Panel title="The Global Brain" icon={BrainIcon} className="h-full">
                   <div className="w-full h-full">
-                    <Brain
+                    <Orb
                       strategies={data.book_strategies.items.map((s) => ({
                         key: s.key,
                         name: s.name,
                         status: s.source_status,
                       }))}
+                      markets={(data.scanner.rows ?? []).map((m) => ({
+                        id : m.market_id,
+                        question: m.question,
+                        change_24h: m.change_24h,
+                      }))}      
                     />
                   </div> 
                 </Panel>
