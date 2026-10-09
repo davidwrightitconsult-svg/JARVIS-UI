@@ -125,7 +125,7 @@ function OrbNodes({ nodes }: { nodes: OrbNode[] }) {
 }       
 
 
-// ---- ShellInstances: one InstancedMesh per shell, guaranteed color ----
+// ---- ShellInstances: one Points cloud per shell, reliable per-vertex color ----
 
 function ShellInstances({
   nodes,
@@ -136,77 +136,73 @@ function ShellInstances({
   color: string
   sizeMultiplier: number
 }) {
-  const instancedRef = useRef<THREE.InstancedMesh>(null)
-   
-  
-  // Write initial positions + sizes once
+  const pointsRef = useRef<THREE.Points>(null)
 
-  useEffect(() => {
-    const mesh = instancedRef.current
-    if (!mesh) return
-    const dummy = new THREE.Object3D()
+  // Baked positions + colors — reliable per-vertex coloring
+  const pointsGeo = useMemo(() => {
+    const n = nodes.length
+    const positions = new Float32Array(n * 3)
+    const colors = new Float32Array(n * 3)
+    const color3 = new THREE.Color(color)
 
-    
     nodes.forEach((node, i) => {
-      dummy.position.copy(node.position)
-      dummy.scale.setScalar(node.size * sizeMultiplier)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
+      positions[i * 3 + 0] = node.position.x
+      positions[i * 3 + 1] = node.position.y
+      positions[i * 3 + 2] = node.position.z
+
+      colors[i * 3 + 0] = color3.r
+      colors[i * 3 + 1] = color3.g
+      colors[i * 3 + 2] = color3.b
     })
 
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    return geo
+  }, [nodes, color])
 
-
-    mesh.instanceMatrix.needsUpdate = true
-},   [nodes, sizeMultiplier])
-
-
-// Per-frame drift
-useFrame((state) => {
-    const mesh = instancedRef.current
-    if (!mesh || nodes.length === 0) return
-
-
+  // Per-frame drift: animate position attribute in-place
+  useFrame((state) => {
+    const pts = pointsRef.current
+    if (!pts) return
+    const geo = pts.geometry as THREE.BufferGeometry
+    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute
+    const arr = posAttr.array as Float32Array
     const t = state.clock.elapsedTime
-    const dummy = new THREE.Object3D()
 
     nodes.forEach((node, i) => {
       const drift = 0.12
       const phase = node.driftPhase
       const speed = node.driftSpeed
 
-      dummy.position.set(
-        node.basePosition.x + Math.sin(t * speed + phase) * drift,
-        node.basePosition.y + Math.cos(t * speed * 0.7 + phase * 1.3) * drift,
-        node.basePosition.z + Math.sin(t * speed * 0.5 + phase * 0.9) * drift,
-      )
-      dummy.scale.setScalar(node.size * sizeMultiplier)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
+      arr[i * 3 + 0] = node.basePosition.x + Math.sin(t * speed + phase) * drift
+      arr[i * 3 + 1] = node.basePosition.y + Math.cos(t * speed * 0.7 + phase * 1.3) * drift
+      arr[i * 3 + 2] = node.basePosition.z + Math.sin(t * speed * 0.5 + phase * 0.9) * drift
     })
 
-    mesh.instanceMatrix.needsUpdate = true
+    posAttr.needsUpdate = true
   })
 
-  return (
-    <instancedMesh
-      ref={instancedRef}
-      args={[undefined, undefined, nodes.length]}
-    >
-      <sphereGeometry args={[1, 10, 10]} />
-      <meshStandardMaterial
-          color={color}
-          toneMapped={false}
-          transparent
-          opacity={0.95}
-          emissiveIntensity={1.5}
-          emissive={color}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </instancedMesh>
-   )
-}
+  if (nodes.length === 0) return null
 
+  // Point size — sized to be visible as a dot, not a blob
+  const pointSize = 4 * sizeMultiplier
+
+  return (
+    <points ref={pointsRef} geometry={pointsGeo}>
+      <pointsMaterial
+        size={pointSize}
+        vertexColors
+        sizeAttenuation
+        transparent
+        opacity={0.95}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </points>
+  )
+}
 
 // ---- Public component ----
 
