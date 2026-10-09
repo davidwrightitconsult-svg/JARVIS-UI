@@ -72,3 +72,42 @@ body {
     opacity: 0.95;
   }
 }
+
+
+/* ---- Orb pulse animations ---- */
+
+/* core-cyan: quick radial flash, expands slightly and fades */
+@keyframes orb-pulse-core-cyan {
+  0%   { opacity: 0;   transform: scale(0.3); }
+  25%  { opacity: 1;   transform: scale(0.9); }
+  100% { opacity: 0;   transform: scale(1.6); }
+}
+
+/* core-red: same shape but red, longer tail */
+@keyframes orb-pulse-core-red {
+  0%   { opacity: 0;   transform: scale(0.3); }
+  20%  { opacity: 1;   transform: scale(0.9); }
+  100% { opacity: 0;   transform: scale(1.8); }
+}
+
+/* ring-out: expanding ring that fades as it grows */
+@keyframes orb-pulse-ring-out {
+  0%   { opacity: 0;   transform: scale(0.4); }
+  15%  { opacity: 1;   transform: scale(0.6); }
+  100% { opacity: 0;   transform: scale(1.7); }
+}
+
+/* market-wave: slower, wider expanding ring in amber */
+@keyframes orb-pulse-market-wave {
+  0%   { opacity: 0;   transform: scale(0.5); }
+  10%  { opacity: 0.9; transform: scale(0.7); }
+  100% { opacity: 0;   transform: scale(1.5); }
+}
+
+/* kill-red: full-orb red tint, holds then fades */
+@keyframes orb-pulse-kill-red {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  80%  { opacity: 0.9; }
+  100% { opacity: 0; }
+}

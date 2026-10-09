@@ -15,10 +15,14 @@ import {
   type OrbNode,
   type OrbSource,
 } from './orb/orbLayout'
+import { useOrbPulses, type DensityMode } from './orb/useOrbPulses'
+import type { BrainEvent } from '../api/useBrainStream'
 
 interface OrbProps {
   strategies: { key: string; name: string; status: string }[]
   markets?: { id: string; question: string; change_24h: number | null }[]
+  latestEvent?: BrainEvent | null
+  densityMode?: DensityMode
 }
 
 const PIXELS_PER_UNIT = 90
@@ -30,12 +34,19 @@ const SHELL_SPEEDS: Record<string, { x: number; y: number }> = {
   ambient: { x: -6.0, y: -7.0 },
 }
 
-export default function Orb({ strategies, markets = [] }: OrbProps) {
+export default function Orb({
+  strategies,
+  markets = [],
+  latestEvent = null,
+  densityMode = 'signals',
+}: OrbProps) {
   const nodes = useMemo(() => {
     const source: OrbSource = { strategies, markets }
     return buildOrbNodes(source)
   }, [strategies, markets])
-
+    // Translate incoming events into visual pulses
+  const pulses = useOrbPulses(latestEvent, densityMode)
+ 
   const [t, setT] = useState(0)
   const startRef = useRef<number>(performance.now())
 
@@ -95,8 +106,138 @@ export default function Orb({ strategies, markets = [] }: OrbProps) {
           </div>
         </div>
       </div>
+
+      {/* Pulse overlays — rendered above the orb, animated via CSS */}
+      {pulses.map((pulse) => (
+        <PulseOverlay key={pulse.id} pulse={pulse} />
+      ))}
     </div>
   )
+}
+
+
+// ---- PulseOverlay: one animated visual reaction ----
+
+function PulseOverlay({
+  pulse,
+}: {
+  pulse: import('./orb/useOrbPulses').OrbPulse
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    // Reset animation
+    el.style.animation = 'none'
+    // Force reflow so the browser picks up the change
+    void el.offsetWidth
+    // Apply the animation matching this pulse kind
+    const animationName = `orb-pulse-${pulse.kind}`
+    const duration = pulse.durationMs
+    el.style.animation = `${animationName} ${duration}ms ease-out forwards`
+
+    return () => {
+      el.style.animation = 'none'
+    }
+  }, [pulse.kind, pulse.durationMs])
+
+  // Different pulse kinds render different shapes
+  const commonStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    pointerEvents: 'none',
+    transformOrigin: 'center',
+  }
+
+  switch (pulse.kind) {
+    case 'core-cyan':
+      return (
+        <div
+          ref={ref}
+          style={{
+            ...commonStyle,
+            width: 200,
+            height: 200,
+            marginLeft: -100,
+            marginTop: -100,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(circle, rgba(34,211,238,0.65) 0%, rgba(34,211,238,0.25) 40%, transparent 70%)',
+          }}
+        />
+      )
+
+    case 'core-red':
+      return (
+        <div
+          ref={ref}
+          style={{
+            ...commonStyle,
+            width: 220,
+            height: 220,
+            marginLeft: -110,
+            marginTop: -110,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(circle, rgba(239,68,68,0.7) 0%, rgba(239,68,68,0.3) 40%, transparent 70%)',
+          }}
+        />
+      )
+
+    case 'ring-out':
+      return (
+        <div
+          ref={ref}
+          style={{
+            ...commonStyle,
+            width: 300,
+            height: 300,
+            marginLeft: -150,
+            marginTop: -150,
+            borderRadius: '50%',
+            border: '2px solid rgba(34,211,238,0.85)',
+            boxShadow: '0 0 20px 4px rgba(34,211,238,0.5)',
+          }}
+        />
+      )
+
+    case 'market-wave':
+      return (
+        <div
+          ref={ref}
+          style={{
+            ...commonStyle,
+            width: 400,
+            height: 400,
+            marginLeft: -200,
+            marginTop: -200,
+            borderRadius: '50%',
+            border: '2px solid rgba(245,158,11,0.8)',
+            boxShadow: '0 0 30px 6px rgba(245,158,11,0.4)',
+          }}
+        />
+      )
+
+    case 'kill-red':
+      return (
+        <div
+          ref={ref}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(circle, rgba(239,68,68,0.35) 0%, rgba(239,68,68,0.15) 50%, transparent 100%)',
+          }}
+        />
+      )
+
+    default:
+      return null
+  }
 }
 
 function CorePulse() {

@@ -65,13 +65,40 @@ function Sidebar() {
   )
 }
 
-function TopBar({ data }: { data: DashboardResponse | null }) {
+function TopBar({
+  data,
+  streamState,
+  eventCount,
+}: { 
+  data: DashboardResponse | null
+  streamState: string
+  eventCount: number
+}) {
   const status = data?.system?.status ?? 'DISCONNECTED'
   const mode = data?.system?.mode ?? '—'
   const timestamp = data?.at ? new Date(data.at).toLocaleString() : '—'
+  
+    
+  // Stream state → indicator color
+  const streamColor =
+    streamState === 'open'
+      ? 'text-jarvis-green'
+      : streamState === 'connecting' || streamState === 'reconnecting'
+      ? 'text-jarvis-amber'
+      : 'text-jarvis-red'
 
-  return (
-    <header className="h-14 bg-jarvis-panel border-b border-jarvis-border flex items-center px-6 gap-6">
+  const streamLabel =
+    streamState === 'open'
+      ? 'LIVE'
+      : streamState === 'connecting'
+      ? 'CONNECTING'
+      : streamState === 'reconnecting'
+      ? 'RECONNECTING'
+      : 'OFFLINE'
+
+
+return (
+  <header className="h-14 bg-jarvis-panel border-b border-jarvis-border flex items-center px-6 gap-6">
       <div className="flex items-center gap-3">
         <span className="font-mono text-jarvis-cyan text-lg font-bold tracking-widest">
           J.A.R.V.I.S.
@@ -82,6 +109,21 @@ function TopBar({ data }: { data: DashboardResponse | null }) {
       </div>
       <div className="flex-1" />
       <div className="flex items-center gap-6 text-xs font-mono">
+        <div className="flex items-center gap-2">
+          <span className="text-jarvis-textMuted">STREAM</span>
+          <span className={`relative flex h-2 w-2`}>
+            <span
+              className={`absolute inline-flex h-full w-full rounded-full ${streamColor.replace('text-', 'bg-')} ${
+                streamState === 'open' ? 'opacity-75 animate-ping' : ''
+              }`}
+            />
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${streamColor.replace('text-', 'bg-')}`}
+            />
+          </span>
+          <span className={streamColor}>{streamLabel}</span>
+          <span className="text-jarvis-textDim">({eventCount})</span>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-jarvis-textMuted">MODE</span>
           <span className="text-jarvis-cyan">{mode}</span>
@@ -133,6 +175,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const brainStream = useBrainStream()
+  const [densityMode, setDensityMode] = useState<'signals' | 'all'>('signals')
   useEffect(() => {
     let cancelled = false
     const fetchData = async () => {
@@ -160,7 +203,11 @@ function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-jarvis-bg text-jarvis-text overflow-hidden">
-      <TopBar data={data} />
+      <TopBar
+        data={data}
+        streamState={brainStream.state}
+        eventCount={brainStream.count}
+      />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-auto p-4">
@@ -203,8 +250,23 @@ function App() {
               </div>
 
               <div className="col-span-6">
-                <Panel title="The Global Brain" icon={BrainIcon} className="h-full">
-                  <div className="w-full h-full">
+                <div className="panel flex flex-col overflow-hidden h-full">
+                  <div className="panel-header flex items-center gap-2">
+                    <BrainIcon className="w-3.5 h-3.5 text-jarvis-cyan" />
+                    <span>The Global Brain</span>
+                    <div className="flex-1" />
+                    <button
+                      onClick={() =>
+                        setDensityMode((m) => (m === 'signals' ? 'all' : 'signals'))
+                      }
+                      className="text-[10px] px-2 py-0.5 border border-jarvis-border rounded hover:border-jarvis-cyan/50 hover:text-jarvis-cyan transition-colors"
+                      title="Toggle between showing only high-signal events or all events"
+                    >
+                      {densityMode === 'signals' ? 'SIGNALS' : 'ALL EVENTS'}
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden">
                     <Orb
                       strategies={data.book_strategies.items.map((s) => ({
                         key: s.key,
@@ -212,14 +274,16 @@ function App() {
                         status: s.source_status,
                       }))}
                       markets={(data.scanner.rows ?? []).map((m) => ({
-                        id : m.market_id,
+                        id: m.market_id,
                         question: m.question,
                         change_24h: m.change_24h,
-                      }))}      
+                      }))}
+                      latestEvent={brainStream.latest}
+                      densityMode={densityMode}
                     />
-                  </div> 
-                </Panel>
-              </div>
+                 </div>
+               </div>
+             </div>
 
               <div className="col-span-3 flex flex-col gap-4">
                 <Panel title="Market Scanner" icon={Activity} className="flex-1">
