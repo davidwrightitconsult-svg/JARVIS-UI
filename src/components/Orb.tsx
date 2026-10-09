@@ -1,238 +1,179 @@
 /**
- * Orb — 3D luminous intelligence core with three concentric shells.
+ * Orb — pure CSS/DOM visualization of the J.A.R.V.I.S. intelligence core.
  *
- * This is the primary visualization for J.A.R.V.I.S.
- * Replaces the earlier brain-style visualization.
+ * No WebGL. No Three.js. Every node is a div. Every animation is a CSS
+ * transform. Every color is guaranteed to render correctly.
+ *
+ * Three shells rotate on multiple axes so no shell ever collapses into
+ * a flat line. A fixed camera skew tilts the whole scene so we never
+ * view it dead-on.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { EffectComposer, Bloom } from '@react-three/postprocessing'
-import * as THREE from 'three'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  generateOrbNodes,
+  buildOrbNodes,
   type OrbNode,
   type OrbSource,
-} from './orb/OrbGeometry'
+} from './orb/orbLayout'
 
 interface OrbProps {
   strategies: { key: string; name: string; status: string }[]
   markets?: { id: string; question: string; change_24h: number | null }[]
 }
 
-// ---- The central core: solid sphere + wireframe cage + halo ----
+const PIXELS_PER_UNIT = 90
+const DEPTH_SCALE = 0.35
 
-function OrbCore() {
-  const cageRef = useRef<THREE.LineSegments>(null)
-  const solidRef = useRef<THREE.Mesh>(null)
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime
-    if (cageRef.current) {
-      cageRef.current.rotation.y = t * 0.15
-      cageRef.current.rotation.x = t * 0.08
-    }
-    // Gentle "breathing" pulse on the core
-    if (solidRef.current) {
-      const s = 1 + 0.04 * Math.sin(t * 1.2)
-      solidRef.current.scale.setScalar(s)
-    }
-  })
-
-  // Wireframe cage geometry
-  const cageGeo = useMemo(() => {
-    const geo = new THREE.IcosahedronGeometry(0.85, 2)
-    return new THREE.WireframeGeometry(geo)
-  }, [])
-
-  return (
-    <group>
-      {/* Solid core */}
-      <mesh ref={solidRef}>
-        <sphereGeometry args={[0.55, 32, 32]} />
-        <meshBasicMaterial color="#22d3ee" toneMapped={false} />
-      </mesh>
-
-      {/* Inner halo */}
-      <mesh>
-        <sphereGeometry args={[0.75, 24, 24]} />
-        <meshBasicMaterial
-          color="#0891b2"
-          transparent
-          opacity={0.25}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* Rotating wireframe cage */}
-      <lineSegments ref={cageRef} geometry={cageGeo}>
-        <lineBasicMaterial
-          color="#22d3ee"
-          transparent
-          opacity={0.35}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </lineSegments>
-    </group>
-  )
+const SHELL_SPEEDS: Record<string, { x: number; y: number }> = {
+  strategy: { x: 4.5, y: 12.0 },
+  market: { x: 9.0, y: 5.5 },
+  ambient: { x: -6.0, y: -7.0 },
 }
-
-// ---- Nodes on the three shells (instanced) ----
-
-function OrbNodes({ nodes }: { nodes: OrbNode[] }) {
-  const groupRef = useRef<THREE.Group>(null)
-
-  // Write instance matrices + colors once
-  const shells = useMemo(() => {
-     
-    const strategy = nodes.filter((n) => n.shell === 'strategy')
-    const market = nodes.filter((n) => n.shell === 'market')
-    const ambient = nodes.filter((n) => n.shell === 'ambient')
-    return { strategy, market, ambient }
-  }, [nodes])
-  
- // Slow rotation of the entire system
- useFrame((state, delta) => {
-   if (groupRef.current) {
-     groupRef.current.rotation.y += delta * 0.08
-    }
-  })
-  
-
-  return (
-     <group ref={groupRef}>
-       <ShellInstances
-         nodes={shells.strategy}
-         color="#22d3ee"
-         sizeMultiplier={1.0}
-       />
-
-       <ShellInstances
-         nodes={shells.market}
-         color="#94a3b8"
-         sizeMultiplier={0.7}
-       />
-
-       <ShellInstances
-         nodes={shells.ambient}
-         color="#0e7490"
-         sizeMultipier={0.5}
-       />
-     </group>
-   )
-}       
-
-
-// ---- ShellInstances: one Points cloud per shell, reliable per-vertex color ----
-
-function ShellInstances({
-  nodes,
-  color,
-  sizeMultiplier,
-}: {
-  nodes: OrbNode[]
-  color: string
-  sizeMultiplier: number
-}) {
-  const pointsRef = useRef<THREE.Points>(null)
-
-  // Baked positions + colors — reliable per-vertex coloring
-  const pointsGeo = useMemo(() => {
-    const n = nodes.length
-    const positions = new Float32Array(n * 3)
-    const colors = new Float32Array(n * 3)
-    const color3 = new THREE.Color(color)
-
-    nodes.forEach((node, i) => {
-      positions[i * 3 + 0] = node.position.x
-      positions[i * 3 + 1] = node.position.y
-      positions[i * 3 + 2] = node.position.z
-
-      colors[i * 3 + 0] = color3.r
-      colors[i * 3 + 1] = color3.g
-      colors[i * 3 + 2] = color3.b
-    })
-
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-    return geo
-  }, [nodes, color])
-
-  // Per-frame drift: animate position attribute in-place
-  useFrame((state) => {
-    const pts = pointsRef.current
-    if (!pts) return
-    const geo = pts.geometry as THREE.BufferGeometry
-    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute
-    const arr = posAttr.array as Float32Array
-    const t = state.clock.elapsedTime
-
-    nodes.forEach((node, i) => {
-      const drift = 0.12
-      const phase = node.driftPhase
-      const speed = node.driftSpeed
-
-      arr[i * 3 + 0] = node.basePosition.x + Math.sin(t * speed + phase) * drift
-      arr[i * 3 + 1] = node.basePosition.y + Math.cos(t * speed * 0.7 + phase * 1.3) * drift
-      arr[i * 3 + 2] = node.basePosition.z + Math.sin(t * speed * 0.5 + phase * 0.9) * drift
-    })
-
-    posAttr.needsUpdate = true
-  })
-
-  if (nodes.length === 0) return null
-
-  // Point size — sized to be visible as a dot, not a blob
-  const pointSize = 4 * sizeMultiplier
-
-  return (
-    <points ref={pointsRef} geometry={pointsGeo}>
-      <pointsMaterial
-        size={pointSize}
-        vertexColors
-        sizeAttenuation
-        transparent
-        opacity={0.95}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </points>
-  )
-}
-
-// ---- Public component ----
 
 export default function Orb({ strategies, markets = [] }: OrbProps) {
   const nodes = useMemo(() => {
     const source: OrbSource = { strategies, markets }
-    return generateOrbNodes(source)
+    return buildOrbNodes(source)
   }, [strategies, markets])
 
+  const [t, setT] = useState(0)
+  const startRef = useRef<number>(performance.now())
+
+  useEffect(() => {
+    let rafId = 0
+    const tick = () => {
+      const elapsed = (performance.now() - startRef.current) / 1000
+      setT(elapsed)
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
+  const containerRotY = t * 4
+
   return (
-    <div className="w-full h-full">
-      <Canvas
-        camera={{ position: [0, 0, 14], fov: 50 }}
-        gl={{ antialias: true, alpha: true }}
-        style={{ background: 'transparent' }}
+    <div className="w-full h-full flex items-center justify-center overflow-hidden">
+      <div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          width: 480,
+          height: 480,
+          background:
+            'radial-gradient(circle, rgba(34,211,238,0.08) 0%, rgba(34,211,238,0.02) 40%, transparent 70%)',
+        }}
+      />
+
+      <div
+        className="relative"
+        style={{
+          width: 480,
+          height: 480,
+          perspective: '1000px',
+          transformStyle: 'preserve-3d',
+        }}
       >
-        <ambientLight intensity={0.5} />
-
-        <OrbCore />
-        <OrbNodes nodes={nodes} />
-
-        <EffectComposer>
-          <Bloom
-            intensity={1.4}
-            luminanceThreshold={0.1}
-            luminanceSmoothing={0.9}
-            mipmapBlur
-          />
-        </EffectComposer>
-      </Canvas>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transformStyle: 'preserve-3d',
+            transform: 'rotateX(28deg) rotateZ(-12deg)',
+          }}
+        >
+          <div
+            className="absolute inset-0"
+            style={{
+              transformStyle: 'preserve-3d',
+              transform: `rotateY(${containerRotY}deg)`,
+            }}
+          >
+            <CorePulse />
+            {nodes.map((node) => (
+              <Node key={node.id} node={node} time={t} />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
+}
+
+function CorePulse() {
+  return (
+    <div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        left: '50%',
+        top: '50%',
+        width: 60,
+        height: 60,
+        transform: 'translate(-50%, -50%)',
+        background:
+          'radial-gradient(circle at 35% 35%, #67e8f9 0%, #22d3ee 30%, #0891b2 70%, rgba(8,145,178,0) 100%)',
+        boxShadow:
+          '0 0 40px 12px rgba(34,211,238,0.55), 0 0 80px 24px rgba(34,211,238,0.25)',
+        animation: 'orb-core-breathe 3s ease-in-out infinite',
+      }}
+    />
+  )
+}
+
+function Node({ node, time }: { node: OrbNode; time: number }) {
+  const speed = SHELL_SPEEDS[node.shell] ?? { x: 0, y: 0 }
+  const rotX = (speed.x * time * Math.PI) / 180
+  const rotY = (speed.y * time * Math.PI) / 180
+
+  const driftAngle = Math.sin(time * node.driftSpeed + node.driftPhase) * 0.08
+
+  const cosY = Math.cos(rotY)
+  const sinY = Math.sin(rotY)
+  const x1 = node.ux * cosY - node.uz * sinY
+  const z1 = node.ux * sinY + node.uz * cosY
+  const y1 = node.uy
+
+  const cosX = Math.cos(rotX)
+  const sinX = Math.sin(rotX)
+  const x2 = x1
+  const y2 = y1 * cosX - z1 * sinX
+  const z2 = y1 * sinX + z1 * cosX
+
+  const dx = Math.cos(driftAngle) * x2 - Math.sin(driftAngle) * z2
+  const dz = Math.sin(driftAngle) * x2 + Math.cos(driftAngle) * z2
+
+  const px = dx * node.radius * PIXELS_PER_UNIT
+  const py = y2 * node.radius * PIXELS_PER_UNIT
+  const pz = dz
+
+  const depthFactor = 1 + pz * DEPTH_SCALE
+  const diameter = node.diameter * depthFactor
+  const glow = node.glow * depthFactor
+  const opacity = 0.4 + 0.6 * ((pz + 1) / 2)
+  const glowRgba = hexToRgba(node.color, 0.7)
+
+  return (
+    <div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        left: `calc(50% + ${px}px)`,
+        top: `calc(50% + ${py}px)`,
+        width: `${diameter}px`,
+        height: `${diameter}px`,
+        transform: 'translate(-50%, -50%)',
+        backgroundColor: node.color,
+        boxShadow: `0 0 ${glow}px ${glow / 3}px ${glowRgba}`,
+        opacity,
+        zIndex: Math.round(pz * 100) + 100,
+      }}
+      title={node.label}
+    />
+  )
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }

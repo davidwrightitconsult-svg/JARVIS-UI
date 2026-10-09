@@ -59,3 +59,16 @@ body {
     @apply inline-block w-2 h-2 rounded-full;
   }
 }
+
+/* ---- Orb animations ---- */
+
+@keyframes orb-core-breathe {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0.95;
+  }
+}
