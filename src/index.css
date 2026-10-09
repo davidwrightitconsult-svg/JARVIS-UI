@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Global resets & J.A.R.V.I.S. baseline ---- */
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: theme('colors.jarvis.bg');
+  color: theme('colors.jarvis.text');
+  font-family: theme('fontFamily.sans');
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Subtle radial glow behind everything */
+  background-image:
+    radial-gradient(ellipse at top, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(59, 130, 246, 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Custom scrollbars — dark, subtle */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: theme('colors.jarvis.bg');
+}
+::-webkit-scrollbar-thumb {
+  background: theme('colors.jarvis.border');
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.jarvis.cyanDim');
+}
+
+/* Utility: subtle grid background for panels */
+@layer components {
+  .panel {
+    @apply bg-jarvis-panel border border-jarvis-border rounded-lg shadow-panel;
+  }
+  .panel-header {
+    @apply px-4 py-2 border-b border-jarvis-border text-jarvis-textDim text-xs font-mono uppercase tracking-widest;
+  }
+  .panel-body {
+    @apply p-4;
+  }
+  .status-dot {
+    @apply inline-block w-2 h-2 rounded-full;
+  }
+}
