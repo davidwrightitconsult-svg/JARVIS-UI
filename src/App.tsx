@@ -12,6 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { getDashboard, type DashboardResponse } from './api/client'
+import { useBrainStream } from './api/useBrainStream'
 import Orb from './components/Orb'
 function StatusDot({ status }: { status: string }) {
   const color =
@@ -131,7 +132,7 @@ function App() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-
+  const brainStream = useBrainStream()
   useEffect(() => {
     let cancelled = false
     const fetchData = async () => {
