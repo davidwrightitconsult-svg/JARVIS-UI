@@ -11,23 +11,21 @@
 export type ShellKind = 'strategy' | 'market' | 'ambient'
 
 export interface OrbNode {
-  id: string
+  id: number
   shell: ShellKind
-  /** Unit vector position on the sphere (before scaling by radius) */
-  ux: number
-  uy: number
-  uz: number
-  /** Shell radius in "units" (converted to pixels by the renderer) */
-  radius: number
+  position: THREE.Vector3
+  basePosition: THREE.Vector3  // for drifting
   label: string
   status: string
-  color: string
-  /** Diameter in pixels */
-  diameter: number
-  /** Glow radius in pixels */
-  glow: number
+  color: THREE.Color
+  size: number
+  brightness: number
   driftPhase: number
   driftSpeed: number
+  /** For strategies: the strategy key (e.g. BOOK_RSI). For markets: market_id. */
+  strategyKey: string
+  /** For strategies: the strategy name. For markets: the question. */
+  strategyName: string
 }
 
 export interface OrbSource {
@@ -120,6 +118,8 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       glow: 24,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.3 + Math.random() * 0.2,
+      strategyKey: s.key,
+      strateyName: s.name,
     })
   })
 
@@ -140,6 +140,9 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       glow: 16,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.4 + Math.random() * 0.3,
+      strategyKey: m.id,
+      strategyName: m.question,
+
     })
   })
 
@@ -160,6 +163,8 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       glow: 8,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.5 + Math.random() * 0.4,
+      strategyKey: '',
+      strategyName: '',
     })
   }
   

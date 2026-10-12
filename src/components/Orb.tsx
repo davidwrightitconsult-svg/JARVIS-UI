@@ -7,6 +7,8 @@
  * Three shells rotate on multiple axes so no shell ever collapses into
  * a flat line. A fixed camera skew tilts the whole scene so we never
  * view it dead-on.
+ *
+ * Interactive: strategy and market nodes respond to hover and click.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -18,11 +20,21 @@ import {
 import { useOrbPulses, type DensityMode } from './orb/useOrbPulses'
 import type { BrainEvent } from '../api/useBrainStream'
 
+export interface HoveredNodeInfo {
+  kind: 'strategy' | 'market' | 'core'
+  key: string
+  label: string
+  screenX: number
+  screenY: number
+}
+
 interface OrbProps {
   strategies: { key: string; name: string; status: string }[]
   markets?: { id: string; question: string; change_24h: number | null }[]
   latestEvent?: BrainEvent | null
   densityMode?: DensityMode
+  onHoverNode?: (info: HoveredNodeInfo | null) => void
+  onClickNode?: (kind: 'strategy' | 'market' | 'core', key: string) => void
 }
 
 const PIXELS_PER_UNIT = 90
@@ -39,14 +51,16 @@ export default function Orb({
   markets = [],
   latestEvent = null,
   densityMode = 'signals',
+  onHoverNode,
+  onClickNode,
 }: OrbProps) {
   const nodes = useMemo(() => {
     const source: OrbSource = { strategies, markets }
     return buildOrbNodes(source)
   }, [strategies, markets])
-    // Translate incoming events into visual pulses
+
   const pulses = useOrbPulses(latestEvent, densityMode)
- 
+
   const [t, setT] = useState(0)
   const startRef = useRef<number>(performance.now())
 
@@ -99,22 +113,54 @@ export default function Orb({
               transform: `rotateY(${containerRotY}deg)`,
             }}
           >
-            <CorePulse />
+            <CorePulse
+              onHover={(x, y) => {
+                onHoverNode?.({
+                  kind: 'core',
+                  key: 'core',
+                  label: 'J.A.R.V.I.S. Core',
+                  screenX: x,
+                  screenY: y,
+                })
+              }}
+              onLeave={() => onHoverNode?.(null)}
+              onClick={() => onClickNode?.('core', 'core')}
+            />
             {nodes.map((node) => (
-              <Node key={node.id} node={node} time={t} />
+              <Node
+                key={node.id}
+                node={node}
+                time={t}
+                onHover={(x, y) => {
+                  if (node.shell === 'ambient') return
+                  onHoverNode?.({
+                    kind: node.shell === 'market' ? 'market' : 'strategy',
+                    key: node.strategyKey,
+                    label: node.strategyName,
+                    screenX: x,
+                    screenY: y,
+                  })
+                }}
+                onLeave={() => onHoverNode?.(null)}
+                onClick={() => {
+                  if (node.shell === 'strategy') {
+                    onClickNode?.('strategy', node.strategyKey)
+                  } else if (node.shell === 'market') {
+                    onClickNode?.('market', node.strategyKey)
+                  }
+                }}
+              />
             ))}
           </div>
         </div>
       </div>
 
-      {/* Pulse overlays — rendered above the orb, animated via CSS */}
       {pulses.map((pulse) => (
         <PulseOverlay key={pulse.id} pulse={pulse} />
       ))}
     </div>
   )
 }
-
 
 // ---- PulseOverlay: one animated visual reaction ----
 
@@ -128,22 +174,16 @@ function PulseOverlay({
   useEffect(() => {
     const el = ref.current
     if (!el) return
-
-    // Reset animation
     el.style.animation = 'none'
-    // Force reflow so the browser picks up the change
     void el.offsetWidth
-    // Apply the animation matching this pulse kind
     const animationName = `orb-pulse-${pulse.kind}`
     const duration = pulse.durationMs
     el.style.animation = `${animationName} ${duration}ms ease-out forwards`
-
     return () => {
       el.style.animation = 'none'
     }
   }, [pulse.kind, pulse.durationMs])
 
-  // Different pulse kinds render different shapes
   const commonStyle: React.CSSProperties = {
     position: 'absolute',
     left: '50%',
@@ -169,7 +209,6 @@ function PulseOverlay({
           }}
         />
       )
-
     case 'core-red':
       return (
         <div
@@ -186,7 +225,6 @@ function PulseOverlay({
           }}
         />
       )
-
     case 'ring-out':
       return (
         <div
@@ -203,7 +241,6 @@ function PulseOverlay({
           }}
         />
       )
-
     case 'market-wave':
       return (
         <div
@@ -220,7 +257,6 @@ function PulseOverlay({
           }}
         />
       )
-
     case 'kill-red':
       return (
         <div
@@ -234,16 +270,30 @@ function PulseOverlay({
           }}
         />
       )
-
     default:
       return null
   }
 }
 
-function CorePulse() {
+// ---- Core: the central glowing sphere ----
+
+function CorePulse({
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  onHover?: (x: number, y: number) => void
+  onLeave?: () => void
+  onClick?: () => void
+}) {
+  const handleHover = (e: React.MouseEvent) => {
+    if (!onHover) return
+    onHover(e.clientX, e.clientY)
+  }
+
   return (
     <div
-      className="absolute rounded-full pointer-events-none"
+      className="absolute rounded-full cursor-pointer"
       style={{
         left: '50%',
         top: '50%',
@@ -255,12 +305,31 @@ function CorePulse() {
         boxShadow:
           '0 0 40px 12px rgba(34,211,238,0.55), 0 0 80px 24px rgba(34,211,238,0.25)',
         animation: 'orb-core-breathe 3s ease-in-out infinite',
+        pointerEvents: 'auto',
       }}
+      onMouseEnter={handleHover}
+      onMouseMove={handleHover}
+      onMouseLeave={onLeave}
+      onClick={onClick}
     />
   )
 }
 
-function Node({ node, time }: { node: OrbNode; time: number }) {
+// ---- Node: one luminous dot positioned via 3D math ----
+
+function Node({
+  node,
+  time,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  node: OrbNode
+  time: number
+  onHover?: (x: number, y: number) => void
+  onLeave?: () => void
+  onClick?: () => void
+}) {
   const speed = SHELL_SPEEDS[node.shell] ?? { x: 0, y: 0 }
   const rotX = (speed.x * time * Math.PI) / 180
   const rotY = (speed.y * time * Math.PI) / 180
@@ -292,9 +361,18 @@ function Node({ node, time }: { node: OrbNode; time: number }) {
   const opacity = 0.4 + 0.6 * ((pz + 1) / 2)
   const glowRgba = hexToRgba(node.color, 0.7)
 
+  const isInteractive = node.shell !== 'ambient'
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
+  }
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
+  }
+
   return (
     <div
-      className="absolute rounded-full pointer-events-none"
+      className={`absolute rounded-full ${isInteractive ? 'cursor-pointer' : ''}`}
       style={{
         left: `calc(50% + ${px}px)`,
         top: `calc(50% + ${py}px)`,
@@ -305,11 +383,18 @@ function Node({ node, time }: { node: OrbNode; time: number }) {
         boxShadow: `0 0 ${glow}px ${glow / 3}px ${glowRgba}`,
         opacity,
         zIndex: Math.round(pz * 100) + 100,
+        pointerEvents: isInteractive ? 'auto' : 'none',
       }}
       title={node.label}
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={onLeave}
+      onClick={onClick}
     />
   )
 }
+
+// ---- Utilities ----
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')

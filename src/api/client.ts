@@ -171,3 +171,38 @@ export async function getDashboard(): Promise<DashboardResponse> {
   const { data } = await api.get<DashboardResponse>('/dashboard')
   return data
 }
+
+// ---- Full strategy definitions (from /api/strategies) ----
+
+export interface StrategyDefinition {
+  key: string
+  name: string
+  kind: string
+  books: string[]
+  source: string
+  rule: string
+  adaptation: string
+  params: Record<string, number | string | null>
+  exit: {
+    stop: number | null
+    target: number | null
+    max_hold: number | null
+    rule: string
+  }
+  status: string
+}
+
+export interface StrategyRegistryResponse {
+  registry_version: string
+  bar_hours: number
+  lookback_bars: number
+  price_band: [number, number]
+  registered: number
+  signals: number
+  strategies: StrategyDefinition[]
+}
+
+export async function getStrategyRegistry(): Promise<StrategyRegistryResponse> {
+  const { data } = await api.get<StrategyRegistryResponse>('/strategies')
+  return data
+}

@@ -111,3 +111,10 @@ body {
   80%  { opacity: 0.9; }
   100% { opacity: 0; }
 }
+
+/* ---- Detail panel slide-in ---- */
+
+@keyframes panel-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}

@@ -13,7 +13,16 @@ import {
 } from 'lucide-react'
 import { getDashboard, type DashboardResponse } from './api/client'
 import { useBrainStream } from './api/useBrainStream'
-import Orb from './components/Orb'
+import Orb, { type HoverNodeInfo } from './components/Orb'
+import Tooltip, { type TooltipData } from './components/Tooltip'
+import DetailPanel, {
+  type SelectedItem,
+  type MarketDetail,
+} from './components/DetailPanel'
+import {
+  getStrategyRegistry,
+  type StrategyDefinition,
+} from './api/client'
 function StatusDot({ status }: { status: string }) {
   const color =
     status === 'HEALTHY' || status === 'ONLINE'
@@ -174,8 +183,22 @@ function App() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
   const brainStream = useBrainStream()
   const [densityMode, setDensityMode] = useState<'signals' | 'all'>('signals')
+
+  // Full strategy registry (fetched once on mount)
+  const [strategyRegistry, setStrategyRegistry] = useState<
+    Record<string, StrategyDefinition>
+  >({})
+
+  // Hover tooltip state
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null)
+  const [hovered, setHovered] = useState<HoveredNodeInfo | null>(null)
+
+  // Selected item — drives the DetailPanel
+  const [selected, setSelected] = useState<SelectedItem | null>(null)
+
   useEffect(() => {
     let cancelled = false
     const fetchData = async () => {
@@ -200,6 +223,137 @@ function App() {
       clearInterval(interval)
     }
   }, [])
+
+  // ---- Node interaction handlers ----
+
+  const handleHoverNode = (info: HoveredNodeInfo | null) => {
+    setHovered(info)
+
+    if (!info || !data) {
+      setTooltip(null)
+      return
+    }
+
+    if (info.kind === 'core') {
+      setTooltip({
+        x: info.screenX,
+        y: info.screenY,
+        content: (
+          <div className="space-y-1">
+            <div className="text-jarvis-cyan font-bold">J.A.R.V.I.S. Core</div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Mode: {data.system.mode}
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Balance: ${(data.portfolio.equity ?? 0).toFixed(2)}
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Open positions: {data.portfolio.open_positions ?? 0}
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Strategies: {data.book_strategies.registered}
+            </div>
+          </div>
+        ),
+      })
+      return
+    }
+
+    if (info.kind === 'strategy') {
+      const def = strategyRegistry[info.key]
+      setTooltip({
+        x: info.screenX,
+        y: info.screenY,
+        content: (
+          <div className="space-y-1">
+            <div className="text-jarvis-cyan font-bold">{info.label}</div>
+            {def?.source && (
+              <div className="text-jarvis-textMuted text-[10px] italic">
+                {def.source.slice(0, 80)}
+                {def.source.length > 80 ? '…' : ''}
+              </div>
+            )}
+            <div className="text-jarvis-textMuted text-[10px]">
+              Status: {def?.status ?? 'NOT_VERIFIED'}
+            </div>
+            <div className="text-jarvis-amber text-[10px] mt-1">
+              Click for full details
+            </div>
+          </div>
+        ),
+      })
+      return
+    }
+
+    if (info.kind === 'market') {
+      const m = (data.scanner.rows ?? []).find((r) => r.market_id === info.key)
+      if (!m) {
+        setTooltip(null)
+        return
+      }
+      const changeStr =
+        m.change_24h === null
+          ? '—'
+          : `${m.change_24h > 0 ? '+' : ''}${(m.change_24h * 100).toFixed(2)}%`
+      setTooltip({
+        x: info.screenX,
+        y: info.screenY,
+        content: (
+          <div className="space-y-1 max-w-xs">
+            <div className="text-jarvis-cyan font-bold leading-snug">
+              {m.question}
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Price: {(m.price * 100).toFixed(1)}%
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              24h: {changeStr}
+            </div>
+            <div className="text-jarvis-textMuted text-[10px]">
+              Vol: ${m.volume_24h.toLocaleString()}
+            </div>
+            <div className="text-jarvis-amber text-[10px] mt-1">
+              Click for full details
+            </div>
+          </div>
+        ),
+      })
+    }
+  }
+
+  const handleClickNode = (kind: 'strategy' | 'market' | 'core', key: string) => {
+    if (!data) return
+
+    if (kind === 'strategy') {
+      const def = strategyRegistry[key]
+      if (def) {
+        setSelected({ kind: 'strategy', data: def })
+      }
+      return
+    }
+
+    if (kind === 'market') {
+      const m = (data.scanner.rows ?? []).find((r) => r.market_id === key)
+      if (m) {
+        const detail: MarketDetail = {
+          market_id: m.market_id,
+          question: m.question,
+          outcome: m.outcome ?? 'Yes',
+          price: m.price,
+          change_24h: m.change_24h,
+          volume_24h: m.volume_24h,
+          decision: m.decision,
+          signals: m.signals,
+          edge_status: m.edge_status,
+        }
+        setSelected({ kind: 'market', data: detail })
+      }
+      return
+    }
+
+    // Core click — no detail panel yet, just clear
+    setSelected(null)
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col bg-jarvis-bg text-jarvis-text overflow-hidden">
@@ -267,20 +421,22 @@ function App() {
                   </div>
 
                   <div className="flex-1 overflow-hidden">
-                    <Orb
-                      strategies={data.book_strategies.items.map((s) => ({
-                        key: s.key,
-                        name: s.name,
-                        status: s.source_status,
-                      }))}
-                      markets={(data.scanner.rows ?? []).map((m) => ({
-                        id: m.market_id,
-                        question: m.question,
-                        change_24h: m.change_24h,
-                      }))}
-                      latestEvent={brainStream.latest}
-                      densityMode={densityMode}
-                    />
+                   <Orb
+                     strategies={data.book_strategies.items.map((s) => ({
+                       key: s.key,
+                       name: s.name,
+                       status: s.source_status,
+                     }))}
+                     markets={(data.scanner.rows ?? []).map((m) => ({
+                       id: m.market_id,
+                       question: m.question,
+                       change_24h: m.change_24h,
+                     }))}
+                     latestEvent={brainStream.latest}
+                     densityMode={densityMode}
+                     onHoverNode={handleHoverNode}
+                     onClickNode={handleClickNode}
+                   />
                  </div>
                </div>
              </div>
@@ -341,6 +497,11 @@ function App() {
           )}
         </main>
       </div>
+
+      {/* Overlays — rendered last so they sit above everything */}
+      <Tooltip data={tooltip} />
+      <DetailPanel item={selected} onClose={() => setSelected(null)} />
+
     </div>
   )
 }
