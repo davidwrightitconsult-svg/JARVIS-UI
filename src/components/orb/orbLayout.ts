@@ -102,7 +102,7 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
   const nodes: OrbNode[] = []
 
   // ---- Strategy shell ----
-  const strategyRadius = 1.0
+  const strategyRadius = 1.92
   const nStrat = source.strategies.length
   source.strategies.forEach((s, i) => {
     const { ux, uy, uz } = fibUnit(i, nStrat)
@@ -124,7 +124,7 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
   })
 
   // ---- Market shell ----
-  const marketRadius = 1.7
+  const marketRadius = 2.34
   const nMarket = Math.min(source.markets.length, 25)
   source.markets.slice(0, nMarket).forEach((m, i) => {
     const { ux, uy, uz } = fibUnit(i, nMarket)
@@ -147,7 +147,7 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
   })
 
   // ---- Ambient shell ----
-  const ambientOuterRadius = 2.6
+  const ambientOuterRadius = 2.10
   const nAmbientOuter = 100
   for (let i = 0; i < nAmbientOuter; i++) {
     const { ux, uy, uz } = volumePoint()
@@ -169,7 +169,7 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
   }
   
   // ---- Inner ambient shell (fills the volume so it never looks flat) ----
-  const ambientInnerRadius = 1.35
+  const ambientInnerRadius = 0.85
   const nAmbientInner = 60
   for (let i = 0; i < nAmbientInner; i++) {
     const { ux, uy, uz } = volumePoint()

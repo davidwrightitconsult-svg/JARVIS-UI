@@ -118,3 +118,31 @@ body {
   from { transform: translateX(100%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
+
+/* ---- HUD ring rotations ---- */
+
+@keyframes hud-rotate-cw-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes hud-rotate-ccw-slow {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+
+@keyframes hud-rotate-cw-medium {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes hud-rotate-ccw-medium {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+
+.hud-ring-cw-slow   { animation: hud-rotate-cw-slow 90s linear infinite; }
+.hud-ring-ccw-slow  { animation: hud-rotate-ccw-slow 120s linear infinite; }
+.hud-ring-cw-medium { animation: hud-rotate-cw-medium 45s linear infinite; }
+.hud-ring-ccw-medium{ animation: hud-rotate-ccw-medium 60s linear infinite; }
+.hud-spokes-slow    { animation: hud-rotate-cw-slow 150s linear infinite; transform-origin: center; }

@@ -10,7 +10,7 @@
  *
  * Interactive: strategy and market nodes respond to hover and click.
  */
-
+import HudRings from './orb/HudRings'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildOrbNodes,
@@ -41,9 +41,9 @@ const PIXELS_PER_UNIT = 90
 const DEPTH_SCALE = 0.35
 
 const SHELL_SPEEDS: Record<string, { x: number; y: number }> = {
-  strategy: { x: 4.5, y: 12.0 },
-  market: { x: 9.0, y: 5.5 },
-  ambient: { x: -6.0, y: -7.0 },
+  strategy: { x: 0, y: 0 },
+  market: { x: 0, y: 0 },
+  ambient: { x: 0, y: 0 },
 }
 
 export default function Orb({
@@ -75,19 +75,28 @@ export default function Orb({
     return () => cancelAnimationFrame(rafId)
   }, [])
 
-  const containerRotY = t * 4
+  const containerRotY = 0
 
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+      {/* Background glow */}
       <div
         className="absolute rounded-full pointer-events-none"
         style={{
           width: 480,
           height: 480,
           background:
-            'radial-gradient(circle, rgba(34,211,238,0.08) 0%, rgba(34,211,238,0.02) 40%, transparent 70%)',
+            'radial-gradient(circle, rgba(34,211,238,0.10) 0%, rgba(34,211,238,0.03) 40%, transparent 70%)',
         }}
       />
+
+      {/* HUD instrument-panel rings (SVG, decorative) */}
+      <div
+        className="absolute pointer-events-none"
+        style={{ width: 480, height: 480 }}
+      >
+        <HudRings size={480} />
+      </div>
 
       <div
         className="relative"
@@ -97,7 +106,9 @@ export default function Orb({
           perspective: '1000px',
           transformStyle: 'preserve-3d',
         }}
-      >
+      >   
+
+
         <div
           style={{
             position: 'absolute',
