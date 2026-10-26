@@ -54,7 +54,7 @@ export function Row({
 }) {
   return (
     <div className="flex justify-between items-center">
-      <span className="text-jarvis-textMuted">{label}</span>
+      <span className="text-jarvis-textDim">{label}</span>
       <span className={accent ? 'text-jarvis-cyan font-bold' : 'text-jarvis-text'}>
         {value}
       </span>

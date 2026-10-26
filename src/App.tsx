@@ -23,6 +23,7 @@ import { getDashboard, type DashboardResponse } from './api/client'
 
 import Home from './pages/Home'
 import Markets from './pages/Markets'
+import Trades from './pages/Trades'
 
 // ---- Layout: persistent chrome around routed pages ----
 
@@ -90,7 +91,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/markets" element={<Markets />} />
-        <Route path="/trades" element={<ComingSoon name="Trades" />} />
+        <Route path="/trades" element={<Trades />} />
         <Route
           path="/strategies"
           element={<ComingSoon name="Strategies" />}
