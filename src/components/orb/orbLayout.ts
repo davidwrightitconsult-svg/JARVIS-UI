@@ -3,9 +3,11 @@
  * concentric shells. No Three.js, no WebGL — just spherical math.
  *
  * Each node carries:
- *   - 3D unit position (used to compute screen x/y + depth)
- *   - color + size + label for rendering
- *   - drift parameters for animation
+ *   - 3D unit position (used by Orb.tsx to compute screen x/y + depth)
+ *   - hex color string
+ *   - visual size + glow radius
+ *   - drift parameters for organic motion
+ *   - strategy identity for interactivity
  */
 
 export type ShellKind = 'strategy' | 'market' | 'ambient'
@@ -13,18 +15,25 @@ export type ShellKind = 'strategy' | 'market' | 'ambient'
 export interface OrbNode {
   id: number
   shell: ShellKind
-  position: THREE.Vector3
-  basePosition: THREE.Vector3  // for drifting
+  /** Unit vector position on the sphere (before scaling by radius) */
+  ux: number
+  uy: number
+  uz: number
+  /** Shell radius in "layout units" (converted to pixels by Orb.tsx) */
+  radius: number
   label: string
   status: string
-  color: THREE.Color
-  size: number
-  brightness: number
+  /** Hex color string, e.g. "#22d3ee" */
+  color: string
+  /** Diameter in pixels */
+  diameter: number
+  /** Glow radius in pixels */
+  glow: number
   driftPhase: number
   driftSpeed: number
-  /** For strategies: the strategy key (e.g. BOOK_RSI). For markets: market_id. */
+  /** For strategies: the strategy key. For markets: market_id. Empty for ambient. */
   strategyKey: string
-  /** For strategies: the strategy name. For markets: the question. */
+  /** For strategies: the strategy name. For markets: the question. Empty for ambient. */
   strategyName: string
 }
 
@@ -47,70 +56,56 @@ function fibUnit(i: number, n: number): { ux: number; uy: number; uz: number } {
   }
 }
 
-/**
- * A point randomly distributed INSIDE a sphere volume.
- * Used for the ambient shells so the orb looks solid from every angle.
- * Returns a unit-space position where |p| <= 1.
- */
-function volumePoint(): { ux: number; uy: number; uz: number } {
-  while (true) {
-    const x = Math.random() * 2 - 1
-    const y = Math.random() * 2 - 1
-    const z = Math.random() * 2 - 1
-    const len2 = x * x + y * y + z * z
-    if (len2 <= 1 && len2 > 0) {
-      return { ux: x, uy: y, uz: z }
-    }
-  }
-}
-
 function strategyColor(status: string): string {
   switch (status) {
     case 'VERIFIED':
     case 'APPROVED':
     case 'SUCCEEDED':
-      return '#10b981'  // green
+      return '#10b981'
     case 'FAILED':
     case 'REJECTED':
-      return '#ef4444'  // red
+      return '#ef4444'
     case 'TESTING':
     case 'PROCESSING':
     case 'FORWARD_TEST':
-      return '#a855f7'  // purple
+      return '#a855f7'
     case 'NOT_VERIFIED':
     default:
-      return '#22d3ee'  // cyan
+      return '#22d3ee'
   }
 }
 
 function marketColor(change: number | null): string {
-  if (change === null) return '#f59e0b'     // amber - "watching"
-  if (change > 0.005) return '#10b981'      // green - "bullish"
-  if (change < -0.005) return '#ef4444'     // red - "bearish"
-  return '#fbbf24'                          // light amber - "flat"
+  if (change === null) return '#64748b'
+  if (change > 0.005) return '#10b981'
+  if (change < -0.005) return '#ef4444'
+  return '#f59e0b'
 }
 
 /**
  * Build the complete set of nodes for the orb.
  *
- * Shell radii (in layout units — the renderer multiplies by a scale):
- *   strategy: 1.0  (inner)
- *   market:   1.7  (middle)
- *   ambient:  2.6  (outer)
+ * Shell radii (in layout units — Orb.tsx multiplies by PIXELS_PER_UNIT):
+ *   strategy: 2.5  (inner)
+ *   market:   4.5  (middle)
+ *   ambient:  two shells at 6.5 (outer) and 1.35 (inner halo)
  */
 export function buildOrbNodes(source: OrbSource): OrbNode[] {
   const nodes: OrbNode[] = []
+  let id = 0
 
   // ---- Strategy shell ----
-  const strategyRadius = 1.92
+  const STRATEGY_RADIUS = 2.5
   const nStrat = source.strategies.length
   source.strategies.forEach((s, i) => {
     const { ux, uy, uz } = fibUnit(i, nStrat)
     nodes.push({
-      id: `s-${i}`,
+      id: id++,
       shell: 'strategy',
-      ux, uy, uz,
-      radius: strategyRadius,
+      ux,
+      uy,
+      uz,
+      radius: STRATEGY_RADIUS,
       label: s.name,
       status: s.status,
       color: strategyColor(s.status),
@@ -119,20 +114,22 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.3 + Math.random() * 0.2,
       strategyKey: s.key,
-      strateyName: s.name,
+      strategyName: s.name,
     })
   })
 
   // ---- Market shell ----
-  const marketRadius = 2.34
+  const MARKET_RADIUS = 4.5
   const nMarket = Math.min(source.markets.length, 25)
   source.markets.slice(0, nMarket).forEach((m, i) => {
     const { ux, uy, uz } = fibUnit(i, nMarket)
     nodes.push({
-      id: `m-${i}`,
+      id: id++,
       shell: 'market',
-      ux, uy, uz,
-      radius: marketRadius,
+      ux,
+      uy,
+      uz,
+      radius: MARKET_RADIUS,
       label: m.question,
       status: 'MARKET',
       color: marketColor(m.change_24h),
@@ -142,23 +139,24 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       driftSpeed: 0.4 + Math.random() * 0.3,
       strategyKey: m.id,
       strategyName: m.question,
-
     })
   })
 
-  // ---- Ambient shell ----
-  const ambientOuterRadius = 2.10
-  const nAmbientOuter = 100
-  for (let i = 0; i < nAmbientOuter; i++) {
-    const { ux, uy, uz } = volumePoint()
+  // ---- Outer ambient shell ----
+  const AMBIENT_OUTER_RADIUS = 6.5
+  const N_AMBIENT_OUTER = 100
+  for (let i = 0; i < N_AMBIENT_OUTER; i++) {
+    const { ux, uy, uz } = fibUnit(i, N_AMBIENT_OUTER)
     nodes.push({
-      id: `ao-${i}`,
+      id: id++,
       shell: 'ambient',
-      ux, uy, uz,
-      radius: ambientOuterRadius,
+      ux,
+      uy,
+      uz,
+      radius: AMBIENT_OUTER_RADIUS,
       label: '',
       status: 'AMBIENT',
-      color: '#1e40af',
+      color: '#0e7490',
       diameter: 4,
       glow: 8,
       driftPhase: Math.random() * Math.PI * 2,
@@ -167,27 +165,30 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
       strategyName: '',
     })
   }
-  
-  // ---- Inner ambient shell (fills the volume so it never looks flat) ----
-  const ambientInnerRadius = 0.85
-  const nAmbientInner = 60
-  for (let i = 0; i < nAmbientInner; i++) {
-    const { ux, uy, uz } = volumePoint()
+
+  // ---- Inner ambient shell (fills volume so orb doesn't collapse when viewed edge-on) ----
+  const AMBIENT_INNER_RADIUS = 1.35
+  const N_AMBIENT_INNER = 60
+  for (let i = 0; i < N_AMBIENT_INNER; i++) {
+    const { ux, uy, uz } = fibUnit(i, N_AMBIENT_INNER)
     nodes.push({
-      id: `ai-${i}`,
+      id: id++,
       shell: 'ambient',
-      ux, uy, uz,
-      radius: ambientInnerRadius,
+      ux,
+      uy,
+      uz,
+      radius: AMBIENT_INNER_RADIUS,
       label: '',
       status: 'AMBIENT',
-      color: '#0e7490',
+      color: '#0891b2',
       diameter: 3,
       glow: 6,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.6 + Math.random() * 0.4,
+      strategyKey: '',
+      strategyName: '',
     })
   }
-
 
   return nodes
 }

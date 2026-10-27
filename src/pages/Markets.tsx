@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search, TrendingUp, TrendingDown } from 'lucide-react'
+import { Search, TrendingUp } from 'lucide-react'
 import { Panel } from '../components/ui/shared'
 import { getDashboard, type ScannerRow } from '../api/client'
 

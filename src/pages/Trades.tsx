@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { TrendingDown, TrendingUp, Zap } from 'lucide-react'
+import { Zap } from 'lucide-react'
 import { Panel, Row } from '../components/ui/shared'
 import { api } from '../api/client'
 
@@ -112,7 +112,6 @@ export default function Trades() {
 
   const pnlColor =
     portfolio.total_pnl >= 0 ? 'text-jarvis-green' : 'text-jarvis-red'
-  const PnlIcon = portfolio.total_pnl >= 0 ? TrendingUp : TrendingDown
 
   return (
     <div className="h-full flex flex-col gap-4">

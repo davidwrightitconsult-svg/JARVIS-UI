@@ -39,7 +39,7 @@ export default function Home() {
   >({})
 
   const [tooltip, setTooltip] = useState<TooltipData | null>(null)
-  const [hovered, setHovered] = useState<HoveredNodeInfo | null>(null)
+  const [, setHovered] = useState<HoveredNodeInfo | null>(null)
   const [selected, setSelected] = useState<SelectedItem | null>(null)
 
   // ---- Dashboard polling ----
