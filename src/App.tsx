@@ -25,6 +25,9 @@ import Home from './pages/Home'
 import Markets from './pages/Markets'
 import Trades from './pages/Trades'
 import Strategies from './pages/Strategies'
+import Research from './pages/Research'
+import Library from './pages/Library'
+import Settings from './pages/Settings'
 
 // ---- Layout: persistent chrome around routed pages ----
 
@@ -95,14 +98,11 @@ export default function App() {
         <Route path="/trades" element={<Trades />} />
         <Route path="/strategies" element={<Strategies />}
         />
-        <Route
-          path="/research"
-          element={<ComingSoon name="Research" />}
+        <Route path="/research" element={<Research />}
         />
-        <Route path="/library" element={<ComingSoon name="Library" />} />
+        <Route path="/library" element={<Library />} />
         <Route
-          path="/settings"
-          element={<ComingSoon name="Settings" />}
+          path="/settings" element={<Settings />}
         />
         <Route path="*" element={<ComingSoon name="Not Found" />} />
       </Route>
