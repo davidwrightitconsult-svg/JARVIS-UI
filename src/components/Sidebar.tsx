@@ -31,11 +31,15 @@ export default function Sidebar() {
   return (
     <aside className="w-16 bg-jarvis-panel border-r border-jarvis-border flex flex-col items-center py-4 gap-1">
       {/* Logo / brand icon at top */}
-      <div className="mb-6">
-        <div className="w-10 h-10 rounded-lg bg-jarvis-bg border border-jarvis-cyan/30 flex items-center justify-center shadow-glow-sm">
+      <NavLink
+        to="/"
+        title="Home"
+        className="mb-6 block"
+      >
+        <div className="w-10 h-10 rounded-lg bg-jarvis-bg border border-jarvis-cyan/30 flex items-center justify-center shadow-glow-sm hover:border-jarvis-cyan/60 hover:shadow-glow-cyan transition-all">
           <Shield className="w-5 h-5 text-jarvis-cyan" />
         </div>
-      </div>
+      </NavLink>
 
       {NAV_ITEMS.map((item) => (
         <NavLink
