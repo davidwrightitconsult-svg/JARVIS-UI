@@ -330,9 +330,15 @@ export default function Home() {
                 }))}
                 latestEvent={brainStream.latest}
                 densityMode={densityMode}
+                activityCount={data.activity.length}
+                marketCount={data.scanner.markets ?? 0}
+                equity={data.portfolio.equity ?? 0}
                 onHoverNode={handleHoverNode}
                 onClickNode={handleClickNode}
               />
+
+
+
             </div>
           </div>
         </div>

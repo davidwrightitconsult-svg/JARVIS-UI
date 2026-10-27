@@ -1,16 +1,16 @@
 /**
  * Orb — pure CSS/DOM visualization of the J.A.R.V.I.S. intelligence core.
  *
- * No WebGL. No Three.js. Every node is a div. Every animation is a CSS
- * transform. Every color is guaranteed to render correctly.
+ * Layers (back to front):
+ *   1. SphereHud — wireframe sphere + tilted rings + spinning disc
+ *   2. CornerPanels — HUD corner overlays (event count, chart, dial, bars)
+ *   3. Data nodes — strategies/markets on tilted rings, ambient in volume
+ *   4. Pulse overlays — event-driven animations
+ *   5. Core glow — the central bright dot
  *
- * Three shells rotate on multiple axes so no shell ever collapses into
- * a flat line. A fixed camera skew tilts the whole scene so we never
- * view it dead-on.
- *
- * Interactive: strategy and market nodes respond to hover and click.
+ * Data nodes are interactive: hover → tooltip, click → detail panel.
  */
-import HudRings from './orb/HudRings'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildOrbNodes,
@@ -18,6 +18,8 @@ import {
   type OrbSource,
 } from './orb/orbLayout'
 import { useOrbPulses, type DensityMode } from './orb/useOrbPulses'
+import SphereHud from './orb/SphereHud'
+import CornerPanels from './orb/CornerPanels'
 import type { BrainEvent } from '../api/useBrainStream'
 
 export interface HoveredNodeInfo {
@@ -33,13 +35,17 @@ interface OrbProps {
   markets?: { id: string; question: string; change_24h: number | null }[]
   latestEvent?: BrainEvent | null
   densityMode?: DensityMode
+  activityCount?: number
+  marketCount?: number
+  equity?: number
   onHoverNode?: (info: HoveredNodeInfo | null) => void
   onClickNode?: (kind: 'strategy' | 'market' | 'core', key: string) => void
 }
 
-const PIXELS_PER_UNIT = 90
+const PIXELS_PER_UNIT = 480
 const DEPTH_SCALE = 0.35
 
+// Nodes no longer rotate — they're fixed to the tilted rings
 const SHELL_SPEEDS: Record<string, { x: number; y: number }> = {
   strategy: { x: 0, y: 0 },
   market: { x: 0, y: 0 },
@@ -51,6 +57,9 @@ export default function Orb({
   markets = [],
   latestEvent = null,
   densityMode = 'signals',
+  activityCount = 0,
+  marketCount = 0,
+  equity = 0,
   onHoverNode,
   onClickNode,
 }: OrbProps) {
@@ -75,29 +84,36 @@ export default function Orb({
     return () => cancelAnimationFrame(rafId)
   }, [])
 
-  const containerRotY = 0
-
   return (
-            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      {/* Background glow */}
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+      {/* Subtle background glow */}
       <div
         className="absolute rounded-full pointer-events-none"
         style={{
           width: 480,
           height: 480,
           background:
-            'radial-gradient(circle, rgba(34,211,238,0.10) 0%, rgba(34,211,238,0.03) 40%, transparent 70%)',
+            'radial-gradient(circle, rgba(34,211,238,0.10) 0%, rgba(34,211,238,0.02) 40%, transparent 70%)',
         }}
       />
 
-      {/* HUD instrument-panel rings (SVG, decorative) */}
+      {/* SphereHud — wireframe sphere + tilted rings + spinning disc */}
       <div
         className="absolute pointer-events-none"
         style={{ width: 480, height: 480 }}
       >
-        <HudRings size={480} />
+        <SphereHud size={480} />
       </div>
 
+      {/* Corner HUD panels — decorative overlays */}
+      <CornerPanels
+        size={480}
+        activityCount={activityCount}
+        marketCount={marketCount}
+        equity={equity}
+      />
+
+      {/* Orb stage — where nodes are positioned */}
       <div
         className="relative"
         style={{
@@ -106,9 +122,8 @@ export default function Orb({
           perspective: '1000px',
           transformStyle: 'preserve-3d',
         }}
-      >   
-
-
+      >
+        {/* Camera skew — matches the tilt of the rings */}
         <div
           style={{
             position: 'absolute',
@@ -119,11 +134,9 @@ export default function Orb({
         >
           <div
             className="absolute inset-0"
-            style={{
-              transformStyle: 'preserve-3d',
-              transform: `rotateY(${containerRotY}deg)`,
-            }}
+            style={{ transformStyle: 'preserve-3d' }}
           >
+            {/* Interactive core */}
             <CorePulse
               onHover={(x, y) => {
                 onHoverNode?.({
@@ -137,6 +150,8 @@ export default function Orb({
               onLeave={() => onHoverNode?.(null)}
               onClick={() => onClickNode?.('core', 'core')}
             />
+
+            {/* Data nodes */}
             {nodes.map((node) => (
               <Node
                 key={node.id}
@@ -166,6 +181,7 @@ export default function Orb({
         </div>
       </div>
 
+      {/* Pulse overlays */}
       {pulses.map((pulse) => (
         <PulseOverlay key={pulse.id} pulse={pulse} />
       ))}
@@ -173,7 +189,126 @@ export default function Orb({
   )
 }
 
-// ---- PulseOverlay: one animated visual reaction ----
+// ---- Core ----
+
+function CorePulse({
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  onHover?: (x: number, y: number) => void
+  onLeave?: () => void
+  onClick?: () => void
+}) {
+  const handleHover = (e: React.MouseEvent) => {
+    if (!onHover) return
+    onHover(e.clientX, e.clientY)
+  }
+
+  return (
+    <div
+      className="absolute rounded-full cursor-pointer"
+      style={{
+        left: '50%',
+        top: '50%',
+        width: 52,
+        height: 52,
+        transform: 'translate(-50%, -50%)',
+        background:
+          'radial-gradient(circle at 35% 35%, #67e8f9 0%, #22d3ee 30%, #0891b2 70%, rgba(8,145,178,0) 100%)',
+        boxShadow:
+          '0 0 40px 12px rgba(34,211,238,0.55), 0 0 80px 24px rgba(34,211,238,0.25)',
+        animation: 'orb-core-breathe 3s ease-in-out infinite',
+        pointerEvents: 'auto',
+      }}
+      onMouseEnter={handleHover}
+      onMouseMove={handleHover}
+      onMouseLeave={onLeave}
+      onClick={onClick}
+    />
+  )
+}
+
+// ---- Node ----
+
+function Node({
+  node,
+  time,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  node: OrbNode
+  time: number
+  onHover?: (x: number, y: number) => void
+  onLeave?: () => void
+  onClick?: () => void
+}) {
+  const speed = SHELL_SPEEDS[node.shell] ?? { x: 0, y: 0 }
+  const rotX = (speed.x * time * Math.PI) / 180
+  const rotY = (speed.y * time * Math.PI) / 180
+
+  const driftAngle = Math.sin(time * node.driftSpeed + node.driftPhase) * 0.03
+
+  const cosY = Math.cos(rotY)
+  const sinY = Math.sin(rotY)
+  const x1 = node.ux * cosY - node.uz * sinY
+  const z1 = node.ux * sinY + node.uz * cosY
+  const y1 = node.uy
+
+  const cosX = Math.cos(rotX)
+  const sinX = Math.sin(rotX)
+  const x2 = x1
+  const y2 = y1 * cosX - z1 * sinX
+  const z2 = y1 * sinX + z1 * cosX
+
+  const dx = Math.cos(driftAngle) * x2 - Math.sin(driftAngle) * z2
+  const dz = Math.sin(driftAngle) * x2 + Math.cos(driftAngle) * z2
+
+  const px = dx * PIXELS_PER_UNIT
+  const py = y2 * PIXELS_PER_UNIT
+  const pz = dz
+
+  const depthFactor = 1 + pz * DEPTH_SCALE
+  const diameter = node.diameter * depthFactor
+  const glow = node.glow * depthFactor
+  const opacity = 0.4 + 0.6 * ((pz + 1) / 2)
+  const glowRgba = hexToRgba(node.color, 0.7)
+
+  const isInteractive = node.shell !== 'ambient'
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
+  }
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
+  }
+
+  return (
+    <div
+      className={`absolute rounded-full ${isInteractive ? 'cursor-pointer' : ''}`}
+      style={{
+        left: `calc(50% + ${px}px)`,
+        top: `calc(50% + ${py}px)`,
+        width: `${diameter}px`,
+        height: `${diameter}px`,
+        transform: 'translate(-50%, -50%)',
+        backgroundColor: node.color,
+        boxShadow: `0 0 ${glow}px ${glow / 3}px ${glowRgba}`,
+        opacity,
+        zIndex: Math.round(pz * 100) + 100,
+        pointerEvents: isInteractive ? 'auto' : 'none',
+      }}
+      title={node.label}
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={onLeave}
+      onClick={onClick}
+    />
+  )
+}
+
+// ---- Pulse overlay ----
 
 function PulseOverlay({
   pulse,
@@ -188,8 +323,7 @@ function PulseOverlay({
     el.style.animation = 'none'
     void el.offsetWidth
     const animationName = `orb-pulse-${pulse.kind}`
-    const duration = pulse.durationMs
-    el.style.animation = `${animationName} ${duration}ms ease-out forwards`
+    el.style.animation = `${animationName} ${pulse.durationMs}ms ease-out forwards`
     return () => {
       el.style.animation = 'none'
     }
@@ -284,125 +418,6 @@ function PulseOverlay({
     default:
       return null
   }
-}
-
-// ---- Core: the central glowing sphere ----
-
-function CorePulse({
-  onHover,
-  onLeave,
-  onClick,
-}: {
-  onHover?: (x: number, y: number) => void
-  onLeave?: () => void
-  onClick?: () => void
-}) {
-  const handleHover = (e: React.MouseEvent) => {
-    if (!onHover) return
-    onHover(e.clientX, e.clientY)
-  }
-
-  return (
-    <div
-      className="absolute rounded-full cursor-pointer"
-      style={{
-        left: '50%',
-        top: '50%',
-        width: 60,
-        height: 60,
-        transform: 'translate(-50%, -50%)',
-        background:
-          'radial-gradient(circle at 35% 35%, #67e8f9 0%, #22d3ee 30%, #0891b2 70%, rgba(8,145,178,0) 100%)',
-        boxShadow:
-          '0 0 40px 12px rgba(34,211,238,0.55), 0 0 80px 24px rgba(34,211,238,0.25)',
-        animation: 'orb-core-breathe 3s ease-in-out infinite',
-        pointerEvents: 'auto',
-      }}
-      onMouseEnter={handleHover}
-      onMouseMove={handleHover}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-    />
-  )
-}
-
-// ---- Node: one luminous dot positioned via 3D math ----
-
-function Node({
-  node,
-  time,
-  onHover,
-  onLeave,
-  onClick,
-}: {
-  node: OrbNode
-  time: number
-  onHover?: (x: number, y: number) => void
-  onLeave?: () => void
-  onClick?: () => void
-}) {
-  const speed = SHELL_SPEEDS[node.shell] ?? { x: 0, y: 0 }
-  const rotX = (speed.x * time * Math.PI) / 180
-  const rotY = (speed.y * time * Math.PI) / 180
-
-  const driftAngle = Math.sin(time * node.driftSpeed + node.driftPhase) * 0.08
-
-  const cosY = Math.cos(rotY)
-  const sinY = Math.sin(rotY)
-  const x1 = node.ux * cosY - node.uz * sinY
-  const z1 = node.ux * sinY + node.uz * cosY
-  const y1 = node.uy
-
-  const cosX = Math.cos(rotX)
-  const sinX = Math.sin(rotX)
-  const x2 = x1
-  const y2 = y1 * cosX - z1 * sinX
-  const z2 = y1 * sinX + z1 * cosX
-
-  const dx = Math.cos(driftAngle) * x2 - Math.sin(driftAngle) * z2
-  const dz = Math.sin(driftAngle) * x2 + Math.cos(driftAngle) * z2
-
-  const px = dx * node.radius * PIXELS_PER_UNIT
-  const py = y2 * node.radius * PIXELS_PER_UNIT
-  const pz = dz
-
-  const depthFactor = 1 + pz * DEPTH_SCALE
-  const diameter = node.diameter * depthFactor
-  const glow = node.glow * depthFactor
-  const opacity = 0.4 + 0.6 * ((pz + 1) / 2)
-  const glowRgba = hexToRgba(node.color, 0.7)
-
-  const isInteractive = node.shell !== 'ambient'
-
-  const handleMouseEnter = (e: React.MouseEvent) => {
-    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
-  }
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isInteractive && onHover) onHover(e.clientX, e.clientY)
-  }
-
-  return (
-    <div
-      className={`absolute rounded-full ${isInteractive ? 'cursor-pointer' : ''}`}
-      style={{
-        left: `calc(50% + ${px}px)`,
-        top: `calc(50% + ${py}px)`,
-        width: `${diameter}px`,
-        height: `${diameter}px`,
-        transform: 'translate(-50%, -50%)',
-        backgroundColor: node.color,
-        boxShadow: `0 0 ${glow}px ${glow / 3}px ${glowRgba}`,
-        opacity,
-        zIndex: Math.round(pz * 100) + 100,
-        pointerEvents: isInteractive ? 'auto' : 'none',
-      }}
-      title={node.label}
-      onMouseEnter={handleMouseEnter}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={onLeave}
-      onClick={onClick}
-    />
-  )
 }
 
 // ---- Utilities ----

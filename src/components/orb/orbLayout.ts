@@ -1,13 +1,16 @@
 /**
- * Orb layout: pure TypeScript math for positioning nodes on three
- * concentric shells. No Three.js, no WebGL — just spherical math.
+ * Orb layout — Phase B final.
  *
- * Each node carries:
- *   - 3D unit position (used by Orb.tsx to compute screen x/y + depth)
- *   - hex color string
- *   - visual size + glow radius
- *   - drift parameters for organic motion
- *   - strategy identity for interactivity
+ * Node positions are now arranged on the THREE TILTED SATURN RINGS
+ * (not on the sphere surface). The tilt matches the rings' tilt in
+ * SphereHud.tsx so the nodes appear to sit ON the rings.
+ *
+ *   strategy ring: radius 0.36 × 480 = 173px, 12 nodes
+ *   market ring:   radius 0.42 × 480 = 202px, 25 nodes
+ *   ambient volume: scattered through sphere volume (not on a ring)
+ *
+ * Coordinates are returned in "unit" form and Orb.tsx scales them
+ * using the same camera/matrix math as before.
  */
 
 export type ShellKind = 'strategy' | 'market' | 'ambient'
@@ -15,25 +18,22 @@ export type ShellKind = 'strategy' | 'market' | 'ambient'
 export interface OrbNode {
   id: number
   shell: ShellKind
-  /** Unit vector position on the sphere (before scaling by radius) */
+  /** Unit position BEFORE scaling */
   ux: number
   uy: number
   uz: number
-  /** Shell radius in "layout units" (converted to pixels by Orb.tsx) */
+  /** Ring radius (only meaningful for strategy/market shells) */
   radius: number
+  /** Tilt angle of the ring this node sits on (degrees) */
+  tiltDeg: number
   label: string
   status: string
-  /** Hex color string, e.g. "#22d3ee" */
   color: string
-  /** Diameter in pixels */
   diameter: number
-  /** Glow radius in pixels */
   glow: number
   driftPhase: number
   driftSpeed: number
-  /** For strategies: the strategy key. For markets: market_id. Empty for ambient. */
   strategyKey: string
-  /** For strategies: the strategy name. For markets: the question. Empty for ambient. */
   strategyName: string
 }
 
@@ -42,19 +42,17 @@ export interface OrbSource {
   markets: { id: string; question: string; change_24h: number | null }[]
 }
 
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+// Tilt in degrees — must match SphereHud.tsx TILT_DEG
+const TILT_DEG = -15
 
-/** Fibonacci-distributed unit vector at index i of n. */
-function fibUnit(i: number, n: number): { ux: number; uy: number; uz: number } {
-  const y = 1 - (2 * (i + 0.5)) / n
-  const r = Math.sqrt(Math.max(0, 1 - y * y))
-  const theta = GOLDEN_ANGLE * i
-  return {
-    ux: Math.cos(theta) * r,
-    uy: y,
-    uz: Math.sin(theta) * r,
-  }
-}
+// Ring radii as fractions of the orb container (480px)
+const STRATEGY_RING_FRACTION = 0.36
+const MARKET_RING_FRACTION = 0.42
+
+// Ambient volume distribution
+const AMBIENT_COUNT = 60
+const AMBIENT_MIN_RADIUS = 0.5
+const AMBIENT_MAX_RADIUS = 1.0
 
 function strategyColor(status: string): string {
   switch (status) {
@@ -83,34 +81,76 @@ function marketColor(change: number | null): string {
 }
 
 /**
- * Build the complete set of nodes for the orb.
- *
- * Shell radii (in layout units — Orb.tsx multiplies by PIXELS_PER_UNIT):
- *   strategy: 2.5  (inner)
- *   market:   4.5  (middle)
- *   ambient:  two shells at 6.5 (outer) and 1.35 (inner halo)
+ * Given an index i and total n, return the angle around the ring (radians).
+ * Evenly distributes all n nodes around the full circle.
  */
+function ringAngle(i: number, n: number): number {
+  return (i / Math.max(1, n)) * Math.PI * 2
+}
+
+/**
+ * Place a node on a tilted ring. The tilt is applied as a rotation around
+ * the X-axis (matching what SVG does in SphereHud.tsx with rotate(TILT)).
+ *
+ * In 3D:
+ *   x = cos(angle) * radius
+ *   y = sin(angle) * radius * cos(tilt)
+ *   z = sin(angle) * radius * sin(tilt)
+ *
+ * When we pass these to the Orb's camera math, the perspective flattening
+ * makes nodes on the front of the ring appear larger and nodes on the back
+ * appear smaller — exactly matching the ring's visual ellipse.
+ */
+function ringPosition(
+  angle: number,
+  radiusFraction: number,
+): { ux: number; uy: number; uz: number } {
+  const tiltRad = (TILT_DEG * Math.PI) / 180
+  const cosTilt = Math.cos(tiltRad)
+  const sinTilt = Math.sin(tiltRad)
+
+  const ux = Math.cos(angle) * radiusFraction
+  const uy = Math.sin(angle) * radiusFraction * cosTilt
+  const uz = Math.sin(angle) * radiusFraction * sinTilt
+
+  return { ux, uy, uz }
+}
+
+/**
+ * Random point inside the sphere volume. Used for ambient particles.
+ */
+function volumePoint(): { ux: number; uy: number; uz: number } {
+  while (true) {
+    const x = Math.random() * 2 - 1
+    const y = Math.random() * 2 - 1
+    const z = Math.random() * 2 - 1
+    const len2 = x * x + y * y + z * z
+    if (len2 <= 1 && len2 > 0.01) {
+      return { ux: x, uy: y, uz: z }
+    }
+  }
+}
+
 export function buildOrbNodes(source: OrbSource): OrbNode[] {
   const nodes: OrbNode[] = []
   let id = 0
 
-  // ---- Strategy shell ----
-  const STRATEGY_RADIUS = 2.5
+  // ---- Strategy ring (middle) ----
   const nStrat = source.strategies.length
   source.strategies.forEach((s, i) => {
-    const { ux, uy, uz } = fibUnit(i, nStrat)
+    const angle = ringAngle(i, nStrat)
+    const pos = ringPosition(angle, STRATEGY_RING_FRACTION)
     nodes.push({
       id: id++,
       shell: 'strategy',
-      ux,
-      uy,
-      uz,
-      radius: STRATEGY_RADIUS,
+      ...pos,
+      radius: STRATEGY_RING_FRACTION,
+      tiltDeg: TILT_DEG,
       label: s.name,
       status: s.status,
       color: strategyColor(s.status),
-      diameter: 10,
-      glow: 24,
+      diameter: 12,
+      glow: 26,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.3 + Math.random() * 0.2,
       strategyKey: s.key,
@@ -118,23 +158,22 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
     })
   })
 
-  // ---- Market shell ----
-  const MARKET_RADIUS = 4.5
+  // ---- Market ring (outer) ----
   const nMarket = Math.min(source.markets.length, 25)
   source.markets.slice(0, nMarket).forEach((m, i) => {
-    const { ux, uy, uz } = fibUnit(i, nMarket)
+    const angle = ringAngle(i, nMarket)
+    const pos = ringPosition(angle, MARKET_RING_FRACTION)
     nodes.push({
       id: id++,
       shell: 'market',
-      ux,
-      uy,
-      uz,
-      radius: MARKET_RADIUS,
+      ...pos,
+      radius: MARKET_RING_FRACTION,
+      tiltDeg: TILT_DEG,
       label: m.question,
       status: 'MARKET',
       color: marketColor(m.change_24h),
-      diameter: 7,
-      glow: 16,
+      diameter: 10,
+      glow: 20,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.4 + Math.random() * 0.3,
       strategyKey: m.id,
@@ -142,49 +181,27 @@ export function buildOrbNodes(source: OrbSource): OrbNode[] {
     })
   })
 
-  // ---- Outer ambient shell ----
-  const AMBIENT_OUTER_RADIUS = 6.5
-  const N_AMBIENT_OUTER = 100
-  for (let i = 0; i < N_AMBIENT_OUTER; i++) {
-    const { ux, uy, uz } = fibUnit(i, N_AMBIENT_OUTER)
+  // ---- Ambient volume (scattered) ----
+  for (let i = 0; i < AMBIENT_COUNT; i++) {
+    const pos = volumePoint()
+    const scale =
+      AMBIENT_MIN_RADIUS +
+      Math.random() * (AMBIENT_MAX_RADIUS - AMBIENT_MIN_RADIUS)
     nodes.push({
       id: id++,
       shell: 'ambient',
-      ux,
-      uy,
-      uz,
-      radius: AMBIENT_OUTER_RADIUS,
-      label: '',
-      status: 'AMBIENT',
-      color: '#0e7490',
-      diameter: 4,
-      glow: 8,
-      driftPhase: Math.random() * Math.PI * 2,
-      driftSpeed: 0.5 + Math.random() * 0.4,
-      strategyKey: '',
-      strategyName: '',
-    })
-  }
-
-  // ---- Inner ambient shell (fills volume so orb doesn't collapse when viewed edge-on) ----
-  const AMBIENT_INNER_RADIUS = 1.35
-  const N_AMBIENT_INNER = 60
-  for (let i = 0; i < N_AMBIENT_INNER; i++) {
-    const { ux, uy, uz } = fibUnit(i, N_AMBIENT_INNER)
-    nodes.push({
-      id: id++,
-      shell: 'ambient',
-      ux,
-      uy,
-      uz,
-      radius: AMBIENT_INNER_RADIUS,
+      ux: pos.ux * scale,
+      uy: pos.uy * scale,
+      uz: pos.uz * scale,
+      radius: 0,
+      tiltDeg: 0,
       label: '',
       status: 'AMBIENT',
       color: '#0891b2',
       diameter: 3,
       glow: 6,
       driftPhase: Math.random() * Math.PI * 2,
-      driftSpeed: 0.6 + Math.random() * 0.4,
+      driftSpeed: 0.5 + Math.random() * 0.4,
       strategyKey: '',
       strategyName: '',
     })

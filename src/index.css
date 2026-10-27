@@ -146,3 +146,20 @@ body {
 .hud-ring-cw-medium { animation: hud-rotate-cw-medium 45s linear infinite; }
 .hud-ring-ccw-medium{ animation: hud-rotate-ccw-medium 60s linear infinite; }
 .hud-spokes-slow    { animation: hud-rotate-cw-slow 150s linear infinite; transform-origin: center; }
+
+/* ---- Phase B: SphereHud animations ---- */
+
+@keyframes sphere-disc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes sphere-disc-spin-reverse {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+
+@keyframes sphere-core-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.4); }
+}
