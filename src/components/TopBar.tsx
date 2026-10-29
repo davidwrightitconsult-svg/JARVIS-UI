@@ -4,7 +4,7 @@
  *
  * Extracted from App.tsx during Phase 8d (router refactor).
  */
-
+import VoiceButton from './VoiceButton'
 import { StatusDot } from './ui/shared'
 import type { DashboardResponse } from '../api/client'
 
@@ -12,10 +12,18 @@ export default function TopBar({
   data,
   streamState,
   eventCount,
+  voiceListening,
+  voiceSupported,
+  onVoiceStart,
+  onVoiceStop,
 }: {
   data: DashboardResponse | null
   streamState: string
   eventCount: number
+  voiceListening: boolean
+  voiceSupported: boolean
+  onVoiceStart: () => void
+  onVoiceStop: () => void
 }) {
   const status = data?.system?.status ?? 'DISCONNECTED'
   const mode = data?.system?.mode ?? '—'
@@ -73,7 +81,13 @@ export default function TopBar({
           <StatusDot status={status} />
           <span className="text-jarvis-text">{status}</span>
         </div>
-        <div className="text-jarvis-textDim">{timestamp}</div>
+                <div className="text-jarvis-textDim">{timestamp}</div>
+        <VoiceButton
+          listening={voiceListening}
+          supported={voiceSupported}
+          onStart={onVoiceStart}
+          onStop={onVoiceStop}
+        />
       </div>
     </header>
   )
